@@ -1,0 +1,31 @@
+#node_modules
+node_modules/
+circuits/build/
+
+#circom
+*.r1cs
+*.sym
+
+#setup
+*.ptau
+tmp
+
+#zkey
+*.zkey
+verification_key.json
+
+#proof
+proof.json
+public.json
+*.wtns
+
+# Circom test circuits
+*.test.circom
+
+# etc
+.DS_Store
+var
+pgdata
+
+# main circuits (should be auto-generated)
+circuits/main/

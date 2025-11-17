@@ -1,0 +1,12 @@
+{
+    "batch_main": {
+      "file": "syb_rollup/batch-main",
+      "template": "BatchMain",
+      "params": [16, 1]
+    },
+    "prove_score_inclusion": {
+      "file": "prove_score_inclusion",
+      "template": "ProveScoreInclusion",
+      "params": [4]
+    }
+}
