@@ -21,6 +21,18 @@ async function main() {
     console.log('  Circom Verifier Generator')
     console.log('=' + '='.repeat(59) + colors.reset + '\n')
 
+    // Parse command line arguments for protocol
+    const args = process.argv.slice(2)
+    let protocol = 'groth16' // default
+    
+    if (args.includes('--plonk')) {
+        protocol = 'plonk'
+    } else if (args.includes('--groth16')) {
+        protocol = 'groth16'
+    }
+    
+    log.info(`Using protocol: ${protocol}`)
+
     const startTime = Date.now()
 
     try {
@@ -41,7 +53,7 @@ async function main() {
         // Process each circuit
         const results = []
         for (const [circuitName, circuitConfig] of Object.entries(circuitsJson)) {
-            const result = await processCircuit(circuitName, circuitConfig, projectDir)
+            const result = await processCircuit(circuitName, circuitConfig, projectDir, protocol)
             results.push(result)
         }
 
