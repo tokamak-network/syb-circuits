@@ -4,10 +4,10 @@ import * as snarkjs from 'snarkjs'
 import { log } from './utils/logger.mjs'
 
 // Generate proving and verification keys
-export async function generateKeys(circuitName, r1csPath, ptauPath, projectDir) {
+export async function generateKeys(circuitName, r1csPath, ptauPath, projectDir, protocol = 'groth16') {
     const buildDir = path.join(projectDir, 'build', circuitName)
-    const zkeyPath = path.join(buildDir, 'groth16_pkey.zkey')
-    const vkeyPath = path.join(buildDir, 'groth16_vkey.json')
+    const zkeyPath = path.join(buildDir, `${protocol}_pkey.zkey`)
+    const vkeyPath = path.join(buildDir, `${protocol}_vkey.json`)
 
     // Check if keys already exist
     try {
@@ -16,14 +16,23 @@ export async function generateKeys(circuitName, r1csPath, ptauPath, projectDir) 
         log.success(`Keys already exist for: ${circuitName}`)
         return { zkeyPath, vkeyPath }
     } catch {
-        log.step('Generating proving key (this may take a while)...')
+        log.step(`Generating ${protocol} proving key (this may take a while)...`)
 
-        // Generate zkey
-        const { zkey: finalZkey } = await snarkjs.zKey.newZKey(
-            r1csPath,
-            ptauPath,
-            zkeyPath
-        )
+        if (protocol === 'plonk') {
+            // Generate plonk zkey
+            await snarkjs.plonk.setup(
+                r1csPath,
+                ptauPath,
+                zkeyPath
+            )
+        } else {
+            // Generate groth16 zkey
+            await snarkjs.zKey.newZKey(
+                r1csPath,
+                ptauPath,
+                zkeyPath
+            )
+        }
 
         log.success('Proving key generated')
 
