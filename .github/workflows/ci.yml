@@ -1,10 +1,9 @@
-name: pull-requests
+name: Build and Test
 
 on:
-  push:
-    branches: [ "main", "master" ]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [ "main", "dev" ]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -36,24 +35,7 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
-    - name: Get changed files
-      id: changed-files
-      uses: tj-actions/changed-files@v44
-      with:
-        files_yaml: |
-          circuits:
-            - circuits/**/*.{circom,json}
-            - circuits.json
-            - circomkit.json
-          js:
-            - src/**/*.{ts,js}
-            - test/**/*.{js,ts}
-            - scripts/**/*.{mjs,js}
-            - package.json
-            - package-lock.json
-
     - name: Setup Circom
-      if: steps.changed-files.outputs.circuits_any_changed == 'true' || steps.changed-files.outputs.js_any_changed == 'true'
       run: |
         SUDO=""
         if [ "$(id -u)" -ne 0 ]; then
@@ -68,11 +50,9 @@ jobs:
         circom --version
 
     - name: Verify Circuits Compile
-      if: steps.changed-files.outputs.circuits_any_changed == 'true'
       run: |
         npx circomkit compile prove_score_inclusion
         npx circomkit compile batch_main
 
     - name: Run JS/Circuit Tests
-      if: steps.changed-files.outputs.circuits_any_changed == 'true' || steps.changed-files.outputs.js_any_changed == 'true'
       run: npm run test:all
