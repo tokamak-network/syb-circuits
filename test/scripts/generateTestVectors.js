@@ -173,7 +173,11 @@ async function generateTestVectors() {
     name: "sparse_neighbors",
     d: 7,
     neighbors: [100, 200, 300, 400, 500, 600, 700],
-    expectedHash: computeNbrHash(poseidon, 7, [100, 200, 300, 400, 500, 600, 700]),
+    expectedHash: computeNbrHash(
+      poseidon,
+      7,
+      [100, 200, 300, 400, 500, 600, 700],
+    ),
   });
 
   // Save to JSON file in data directory
@@ -181,7 +185,7 @@ async function generateTestVectors() {
     __dirname,
     "..",
     "data",
-    "nodeHasherTestVectors.json",
+    "nbrHasherTestVectors.json",
   );
   fs.writeFileSync(outputPath, JSON.stringify(testVectors, null, 2), "utf8");
   console.log(`\n✓ Test vectors saved to: ${outputPath}`);

@@ -3,7 +3,7 @@ pragma circom 2.0.0;
 include "../../node_modules/circomlib/circuits/poseidon.circom";
 include "../../node_modules/circomlib/circuits/comparators.circom";
 
-// NodeHasher: Computes NbrHash_G(v) for a vertex in the GraphTree
+// NbrHasher: Computes NbrHash_G(v) for a vertex in the GraphTree
 //
 // NbrHash Algorithm (based on NbrData_G(v) = [d, u_0, u_1, ..., u_{d-1}]):
 // - First block B_0: [d, u_0, ..., u_14]  (15 neighbors)
@@ -28,9 +28,9 @@ include "../../node_modules/circomlib/circuits/comparators.circom";
 // Output:
 //   hash - NbrHash_G(v)
 //
-template NodeHasher(maxDeg) {
+template NbrHasher(maxDeg) {
     assert(maxDeg >= 1);
-    
+
     signal input d;               // Degree (actual number of neighbors)
 
     // Calculate number of rounds needed
