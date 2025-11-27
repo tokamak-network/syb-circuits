@@ -9,7 +9,7 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-describe("NodeHasher circuit test", function () {
+describe("NbrHasher circuit test", function () {
   this.timeout(200000);
 
   const MAX_DEG = 15 * 4; // Maximum degree: 15*4 = 60 (numR=4)
@@ -43,7 +43,7 @@ describe("NodeHasher circuit test", function () {
       include: path.join(__dirname, "../"),
     });
     await circuit.loadConstraints();
-    console.log(`\n✓ NodeHasher circuit compiled with maxDeg=${MAX_DEG}`);
+    console.log(`\n✓ NbrHasher circuit compiled with maxDeg=${MAX_DEG}`);
     console.log(`✓ padLen=${PAD_LEN} (15*numR)`);
     console.log(`✓ Constraints: ${circuit.constraints.length}`);
 
@@ -59,7 +59,7 @@ describe("NodeHasher circuit test", function () {
   });
 
   // Helper function to compute NbrHash according to the NEW spec
-  function computeNodeHash(d, neighbors) {
+  function computeNbrHash(d, neighbors) {
     // Pad neighbors array to PAD_LEN
     const paddedNbrs = [...neighbors];
     while (paddedNbrs.length < PAD_LEN) {
@@ -120,7 +120,7 @@ describe("NodeHasher circuit test", function () {
     const d = 0;
     const neighbors = [];
 
-    const expectedHash = computeNodeHash(d, neighbors);
+    const expectedHash = computeNbrHash(d, neighbors);
 
     // Prepare input (pad with zeros)
     const input = {
@@ -140,7 +140,7 @@ describe("NodeHasher circuit test", function () {
     const d = 1;
     const neighbors = [25];
 
-    const expectedHash = computeNodeHash(d, neighbors);
+    const expectedHash = computeNbrHash(d, neighbors);
 
     const paddedNbrs = [
       ...neighbors,
@@ -163,7 +163,7 @@ describe("NodeHasher circuit test", function () {
     const d = 5;
     const neighbors = [1, 3, 8, 12, 15]; // Sorted
 
-    const expectedHash = computeNodeHash(d, neighbors);
+    const expectedHash = computeNbrHash(d, neighbors);
 
     const paddedNbrs = [
       ...neighbors,
@@ -186,7 +186,7 @@ describe("NodeHasher circuit test", function () {
     const d = 15;
     const neighbors = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
 
-    const expectedHash = computeNodeHash(d, neighbors);
+    const expectedHash = computeNbrHash(d, neighbors);
 
     const paddedNbrs = [
       ...neighbors,
@@ -212,7 +212,7 @@ describe("NodeHasher circuit test", function () {
       1, 2, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39,
     ];
 
-    const expectedHash = computeNodeHash(d, neighbors);
+    const expectedHash = computeNbrHash(d, neighbors);
 
     const paddedNbrs = [
       ...neighbors,
@@ -236,7 +236,7 @@ describe("NodeHasher circuit test", function () {
     // Generate 60 neighbors: [1, 2, 3, ..., 60]
     const neighbors = Array.from({ length: 60 }, (_, i) => i + 1);
 
-    const expectedHash = computeNodeHash(d, neighbors);
+    const expectedHash = computeNbrHash(d, neighbors);
 
     const input = {
       d: d.toString(),
@@ -256,7 +256,7 @@ describe("NodeHasher circuit test", function () {
     // 30 neighbors: multiples of 10
     const neighbors = Array.from({ length: 30 }, (_, i) => (i + 1) * 10);
 
-    const expectedHash = computeNodeHash(d, neighbors);
+    const expectedHash = computeNbrHash(d, neighbors);
 
     const paddedNbrs = [
       ...neighbors,
