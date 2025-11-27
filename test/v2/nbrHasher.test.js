@@ -32,10 +32,10 @@ describe("NodeHasher circuit test", function () {
     // Create circuit with MAX_DEG = 59 (14 + 15*3)
     const circuitSrc = `
             pragma circom 2.0.0;
-            include "../circuits/syb_rollup_v2/node_hasher.circom";
-            component main = NodeHasher(${MAX_DEG});
+            include "../circuits/syb_rollup_v2/nbr_hasher.circom";
+            component main = NbrHasher(${MAX_DEG});
         `;
-    circuitTmpPath = path.join(__dirname, "node-hasher.test.circom");
+    circuitTmpPath = path.join(__dirname, "nbr-hasher.test.circom");
     fs.writeFileSync(circuitTmpPath, circuitSrc, "utf8");
 
     circuit = await tester(circuitTmpPath, {
@@ -49,9 +49,7 @@ describe("NodeHasher circuit test", function () {
 
     // Calculate expected rounds
     const numR = Math.ceil(MAX_DEG / 15);
-    console.log(
-      `✓ Total rounds: ${numR} (each processing 15 neighbors)\n`,
-    );
+    console.log(`✓ Total rounds: ${numR} (each processing 15 neighbors)\n`);
   });
 
   after(() => {
