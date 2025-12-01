@@ -31,52 +31,57 @@ include "../../node_modules/circomlib/circuits/comparators.circom";
 template NbrHasher(maxDeg) {
     assert(maxDeg >= 1);
 
-    signal input d;               // Degree (actual number of neighbors)
-
-    // Calculate number of rounds needed
-    // numR = ceil(maxDeg / 15)
     var numR = (maxDeg + 14) \ 15;
-
-    // padLen = 15 * numR (exactly fits into numR hashing rounds)
     var padLen = 15 * numR;
+    var sumValid = 0;
 
+    // inputs
+    signal input d;               // Degree (actual number of neighbors)
     signal input nbr_arr[padLen]; // Neighbor array (must be properly padded)
+
+    // outputs
     signal output hash;
 
-    component isInPadding[padLen];                  // Checks if index i >= d (in padding region)
-    component isNextInPadding[padLen - 1];          // Checks if index i+1 >= d
+    signal isValid[padLen];                         // 1 if index i < d (valid), 0 otherwise
     component isStrictlyAscending[padLen - 1];      // Checks if nbr_arr[i] < nbr_arr[i+1]
 
     // INPUT VALIDATION CHECKS
     // 1. Zero-padding check: nbr_arr[i] == 0 when i >= d
     // 2. Strictly ascending check: nbr_arr[i] < nbr_arr[i+1] when both i and i+1 < d
-    // Array regions:
-    //   [0 ... d-1]         : Valid neighbors (must be strictly ascending)
-    //   [d ... padLen-1]    : Padding zeros   (must all be 0)
+    // Optimized: Uses unary encoding for d (isValid array) instead of per-index comparisons
+    
+    // Step 1: Generate isValid array
+    // for example, if d = 3, padLen = 10
+    // isValid => [1, 1, 1, 0, 0, 0, 0, 0, 0, 0]
+    // sumValid => 3
     for (var i = 0; i < padLen; i++) {
-        // Check if i >= d (in padding region)
-        isInPadding[i] = GreaterEqThan(32);
-        isInPadding[i].in[0] <== i;
-        isInPadding[i].in[1] <== d;
+        // isValid[i] should be 1 if i < d, else 0
+        isValid[i] <-- (i < d) ? 1 : 0;
+        isValid[i] * (1 - isValid[i]) === 0;
+        sumValid += isValid[i];
+    }
+    
+    // Ensure the number of valid entries matches d
+    sumValid === d;
 
-        // When i >= d, nbr_arr[i] must be 0
-        isInPadding[i].out * nbr_arr[i] === 0;
+    // Step 2: Validation checks using isValid
+    for (var i = 0; i < padLen; i++) {
+        if (i > 0) {
+            // Enforce monotonicity: if i-1 is 0, i must be 0 (cannot go from invalid to valid)
+            (1 - isValid[i-1]) * isValid[i] === 0;
+        }
+
+        // Zero-padding check: if invalid, must be 0
+        (1 - isValid[i]) * nbr_arr[i] === 0;
 
         // Strictly ascending check (skip last element since there's no i+1)
         if (i < padLen - 1) {
-            // Check if i+1 >= d
-            isNextInPadding[i] = GreaterEqThan(32);
-            isNextInPadding[i].in[0] <== i + 1;
-            isNextInPadding[i].in[1] <== d;
-
-            // Check if nbr_arr[i] < nbr_arr[i+1]
             isStrictlyAscending[i] = LessThan(252);
             isStrictlyAscending[i].in[0] <== nbr_arr[i];
             isStrictlyAscending[i].in[1] <== nbr_arr[i + 1];
 
-            // Enforce ascending only when both i and i+1 are valid neighbors (i+1 < d)
-            // (1 - isNextInPadding[i].out) means: i+1 < d
-            (1 - isNextInPadding[i].out) * (1 - isStrictlyAscending[i].out) === 0;
+            // Enforce ascending only when i+1 is valid (implies i is also valid)
+            isValid[i+1] * (1 - isStrictlyAscending[i].out) === 0;
         }
     }
 
@@ -104,6 +109,5 @@ template NbrHasher(maxDeg) {
 
         acc[round] <== contHash[round - 1].out;
     }
-
     hash <== acc[numR - 1];
 }
