@@ -14,7 +14,6 @@ include "../../node_modules/circomlib/circuits/comparators.circom";
 //
 // Key Features:
 // - Enforces that nbr_arr[i] == 0 when i >= d (proper padding verification)
-// - Enforces strictly ascending order: nbr_arr[i] < nbr_arr[i+1] for i in 0..d-2
 // - All blocks: 15 neighbors each
 //
 // Parameters:
@@ -44,14 +43,11 @@ template NbrHasher(maxDeg) {
     signal output hash;
 
     component isInPadding[padLen];                  // Checks if index i >= d (in padding region)
-    component isNextInPadding[padLen - 1];          // Checks if index i+1 >= d
-    component isStrictlyAscending[padLen - 1];      // Checks if nbr_arr[i] < nbr_arr[i+1]
 
     // INPUT VALIDATION CHECKS
-    // 1. Zero-padding check: nbr_arr[i] == 0 when i >= d
-    // 2. Strictly ascending check: nbr_arr[i] < nbr_arr[i+1] when both i and i+1 < d
+    // Zero-padding check: nbr_arr[i] == 0 when i >= d
     // Array regions:
-    //   [0 ... d-1]         : Valid neighbors (must be strictly ascending)
+    //   [0 ... d-1]         : neighbors
     //   [d ... padLen-1]    : Padding zeros   (must all be 0)
     for (var i = 0; i < padLen; i++) {
         // Check if i >= d (in padding region)
@@ -61,23 +57,6 @@ template NbrHasher(maxDeg) {
 
         // When i >= d, nbr_arr[i] must be 0
         isInPadding[i].out * nbr_arr[i] === 0;
-
-        // Strictly ascending check (skip last element since there's no i+1)
-        if (i < padLen - 1) {
-            // Check if i+1 >= d
-            isNextInPadding[i] = GreaterEqThan(32);
-            isNextInPadding[i].in[0] <== i + 1;
-            isNextInPadding[i].in[1] <== d;
-
-            // Check if nbr_arr[i] < nbr_arr[i+1]
-            isStrictlyAscending[i] = LessThan(252);
-            isStrictlyAscending[i].in[0] <== nbr_arr[i];
-            isStrictlyAscending[i].in[1] <== nbr_arr[i + 1];
-
-            // Enforce ascending only when both i and i+1 are valid neighbors (i+1 < d)
-            // (1 - isNextInPadding[i].out) means: i+1 < d
-            (1 - isNextInPadding[i].out) * (1 - isStrictlyAscending[i].out) === 0;
-        }
     }
 
     // HASHING: First block B_0 = [d, nbr[0..14]] (15 neighbors)
