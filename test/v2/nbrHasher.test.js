@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const P = BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617');
 
 describe("NbrHasher circuit test", function () {
   this.timeout(200000);
@@ -111,7 +112,6 @@ describe("NbrHasher circuit test", function () {
    * [X] hash a vertex with degree 60 (current maximum degree)
    * [X] hash a vertex with degree 30 (15*2)
    * INVALID
-   * [X] fail with nbr_arr not ascending
    * [X] fail with degree 61 (exceed padLength)
    *
    */
@@ -275,26 +275,39 @@ describe("NbrHasher circuit test", function () {
     assert.equal(circuitOutput, expectedHash);
   });
 
-  it("should fail with nbr_arr is not ascending", async () => {
-    const d = 3;
-    const neighbors = [1, 81, 3];
+  it("should pass with bigint overflow numbers & hash value should be same", async () => {
+      const d = 6; 
+      const neighbors = [0, BigInt(2) * P + BigInt(1), BigInt(3) * P + BigInt(2), P+BigInt(3), P+BigInt(4), P+BigInt(5)]
+      const expectedHash = computeNbrHash(d, neighbors);
 
-    const paddedNbrs = [
-      ...neighbors,
-      ...Array(PAD_LEN - neighbors.length).fill(0),
-    ];
+      const paddedNbrs = [
+        ...neighbors,
+        ...Array(PAD_LEN - neighbors.length).fill(0),
+      ];
 
-    const input = {
-      d: d.toString(),
-      nbr_arr: paddedNbrs.map((x) => x.toString()),
-    };
+      const input = {
+        d: d.toString(),
+        nbr_arr: paddedNbrs.map((x) => x.toString()),
+      };
 
-    try {
-      await circuit.calculateWitness(input, true);
-    } catch (error) {
-      assert(error.message.includes("Assert Failed."));
-    }
-  });
+      const w = await circuit.calculateWitness(input, true);
+      await circuit.checkConstraints(w);
+
+      const circuitOutput = w[1].toString();
+      
+      const trueNeighbors = [0, 1, 2, 3, 4, 5];
+      const trueInput = {
+        d: d.toString(),
+        nbr_arr: [...trueNeighbors, ...Array(PAD_LEN - trueNeighbors.length).fill(0)].map((x) => x.toString()),
+      }
+      const trueWitness = await circuit.calculateWitness(trueInput, true);
+      await circuit.checkConstraints(trueWitness);
+      const trueOutput = trueWitness[1].toString();
+
+      assert.equal(trueOutput, expectedHash);
+      assert.equal(trueOutput, circuitOutput);
+      assert.equal(circuitOutput, expectedHash); 
+    });
 
   it("should fail with a vertex with degree 61", async () => {
     const d = MAX_DEG + 1;
