@@ -8,7 +8,6 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const P = BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617');
 
 describe("NbrHasher circuit test", function () {
   this.timeout(200000);
@@ -17,6 +16,7 @@ describe("NbrHasher circuit test", function () {
   let circuit;
   let circuitTmpPath;
   let poseidon;
+  let P;
 
   // Calculate padLen based on maxDeg
   function calculatePadLen(maxDeg) {
@@ -29,6 +29,7 @@ describe("NbrHasher circuit test", function () {
   before(async () => {
     // Initialize Poseidon hasher
     poseidon = await buildPoseidon();
+    P = poseidon.F.p;
 
     // Create circuit with MAX_DEG = 59 (14 + 15*3)
     const circuitSrc = `
