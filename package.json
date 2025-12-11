@@ -13,6 +13,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@zk-email/circuits": "^6.3.4",
     "circom_tester": "^0.0.20",
     "circomkit": "^0.2.1",
     "circomlib": "^2.0.5",
@@ -22,8 +23,8 @@
   "devDependencies": {
     "@types/loglevel": "^1.6.3",
     "@types/node": "^22.5.3",
+    "mocha": "^11.1.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.5.4",
-    "mocha": "^11.1.0"
+    "typescript": "^5.5.4"
   }
 }
