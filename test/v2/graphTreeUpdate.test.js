@@ -632,8 +632,8 @@ describe("GraphTreeUpdate circuit test", function () {
 
     const input = {
       u: u.toString(),
-      v: v.toString(),
-      r: R.toString(), // Out of bounds!
+      v: v.toString(), // Out of bounds!
+      r: R.toString(),
       oldDegU: oldDegU.toString(),
       oldDegV: oldDegV.toString(),
       newDegU: newDegU.toString(),
