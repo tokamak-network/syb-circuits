@@ -8,7 +8,9 @@ import { generateMain } from './utils/generateMain.mjs'
 import { log, colors } from './utils/logger.mjs'
 
 // Process a single circuit
-export async function processCircuit(circuitName, circuitConfig, projectDir) {
+export async function processCircuit(circuitName, circuitConfig, projectDir, protocol = 'groth16') {
+    // Use circuit-specific protocol if specified, otherwise use global protocol
+    const circuitProtocol = circuitConfig.protocol || protocol
     console.log('\n' + '='.repeat(60))
     console.log(`${colors.cyan}Processing circuit: ${circuitName}${colors.reset}`)
     console.log('='.repeat(60) + '\n')
@@ -30,10 +32,10 @@ export async function processCircuit(circuitName, circuitConfig, projectDir) {
         const ptauPath = await downloadPtau(ptauFile, projectDir)
 
         // 4. Generate keys
-        const { zkeyPath, vkeyPath } = await generateKeys(circuitName, r1csPath, ptauPath, projectDir)
+        const { zkeyPath, vkeyPath } = await generateKeys(circuitName, r1csPath, ptauPath, projectDir, circuitProtocol)
 
         // 5. Generate verifier contract
-        const { contractName } = await generateVerifierContract(circuitName, zkeyPath, vkeyPath, projectDir)
+        const { contractName } = await generateVerifierContract(circuitName, zkeyPath, vkeyPath, projectDir, circuitProtocol)
 
         const duration = ((Date.now() - startTime) / 1000).toFixed(2)
         log.success(`Successfully processed ${circuitName} in ${duration}s`)

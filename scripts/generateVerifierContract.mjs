@@ -4,24 +4,31 @@ import { toPascalCase, execCommand } from './utils/helpers.mjs'
 import { log } from './utils/logger.mjs'
 
 // Generate Solidity verifier contract
-export async function generateVerifierContract(circuitName, zkeyPath, vkeyPath, projectDir) {
+// default protocol is groth16
+// for example, to generate a plonk verifier contract, use:
+// `npm run verifier -- --plonk`
+// or just use: 
+// `npm run verifier`
+// to generate a groth16 verifier contract
+export async function generateVerifierContract(circuitName, zkeyPath, vkeyPath, projectDir, protocol = 'groth16') {
     log.step('Generating Solidity verifier contract')
 
     const buildDir = path.join(projectDir, 'build', circuitName)
-    const verifierPath = path.join(buildDir, 'groth16_verifier.sol')
+    const verifierPath = path.join(buildDir, `${protocol}_verifier.sol`)
 
     try {
         // Read verification key
         const vKey = JSON.parse(await fs.readFile(vkeyPath, 'utf-8'))
 
         // Generate verifier using the templates
-        const templates = await import('snarkjs').then(m => m.groth16)
+        const templates = await import('snarkjs').then(m => m[protocol])
         const verifierCode = await templates.exportSolidityVerifier(vKey, null)
 
         // Customize contract name
         const contractName = `${toPascalCase(circuitName)}Verifier`
+        const oldContractName = protocol === 'plonk' ? 'PlonkVerifier' : 'Groth16Verifier'
         const customizedCode = verifierCode.replace(
-            /contract Groth16Verifier/g,
+            new RegExp(`contract ${oldContractName}`, 'g'),
             `contract ${contractName}`
         )
 
@@ -38,16 +45,17 @@ export async function generateVerifierContract(circuitName, zkeyPath, vkeyPath, 
 
         return { verifierPath: finalPath, contractName }
     } catch (error) {
-        // Fallback: use snarkjs CLI
+        // Fallback: use snarkjs CLI (same command for both protocols)
         log.warning('Using snarkjs CLI fallback for verifier generation')
         const tempVerifierPath = path.join(buildDir, 'temp_verifier.sol')
-
+        
         execCommand(`npx snarkjs zkey export solidityverifier ${zkeyPath} ${tempVerifierPath}`, projectDir)
 
         const verifierCode = await fs.readFile(tempVerifierPath, 'utf-8')
         const contractName = `${toPascalCase(circuitName)}Verifier`
+        const oldContractName = protocol === 'plonk' ? 'PlonkVerifier' : 'Groth16Verifier'
         const customizedCode = verifierCode.replace(
-            /contract Groth16Verifier/g,
+            new RegExp(`contract ${oldContractName}`, 'g'),
             `contract ${contractName}`
         )
 
