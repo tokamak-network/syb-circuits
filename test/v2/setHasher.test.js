@@ -156,8 +156,8 @@ describe("SetHasher circuit test", function () {
     assert.equal(circuitOutput, expectedHash.toString());
   });
 
-  it("should fail when d >= maxDeg", async () => {
-    const d = MAX_DEG; // 60, violates d < maxDeg
+  it("should fail when d > maxDeg", async () => {
+    const d = MAX_DEG + 1; // 61, violates d < maxDeg
     const neighbors = Array.from({ length: MAX_DEG }, (_, i) => i + 1);
 
     const input = {
@@ -174,4 +174,3 @@ describe("SetHasher circuit test", function () {
     }
   });
 });
-
