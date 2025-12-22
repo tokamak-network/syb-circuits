@@ -2,15 +2,15 @@ pragma circom 2.0.0;
 
 include "../../node_modules/circomlib/circuits/smt/smtprocessor.circom";
 include "../../node_modules/circomlib/circuits/comparators.circom";
-include "./nbr_hasher.circom";
+include "./set_hasher.circom";
 include "./lib/is_in_array.circom";
 
 // GraphTreeUpdate: Updates the GraphTree when adding an edge {u,v}
 //
 // This circuit:
 // 1. Verifies preconditions (u != v, degrees within bounds)
-// 2. Computes old NbrHash for u and v (before adding edge)
-// 3. Computes new NbrHash for u and v (after adding edge)
+// 2. Computes old SetHash for u and v (before adding edge)
+// 3. Computes new SetHash for u and v (after adding edge)
 // 4. Updates the Merkle tree for both leaves u and v
 //
 // Parameters:
@@ -23,8 +23,8 @@ include "./lib/is_in_array.circom";
 //   oldDegU, oldDegV - Old degrees (before adding edge)
 //   newDegU, newDegV - New degrees (after adding edge, should be oldDeg + 1)
 //
-//   oldNbrArrU[padLen], oldNbrArrV[padLen] - Old neighbor arrays (before edge)
-//   newNbrArrU[padLen], newNbrArrV[padLen] - New neighbor arrays (after edge)
+//   oldNbrArrU[maxDeg], oldNbrArrV[maxDeg] - Old neighbor arrays (before edge)
+//   newNbrArrU[maxDeg], newNbrArrV[maxDeg] - New neighbor arrays (after edge)
 //
 //   siblingsU[nLevels+1] - Merkle proof for vertex u
 //   siblingsV[nLevels+1] - Merkle proof for vertex v
@@ -35,23 +35,20 @@ include "./lib/is_in_array.circom";
 //   newRoot - New GraphTree root (after adding edge)
 //
 template GraphTreeUpdate(nLevels, maxDeg) {
-    // Calculate padLen for neighbor arrays
-    var numR = (maxDeg + 14) \ 15;
-    var padLen = 15 * numR;
-
     // ===== INPUTS =====
     signal input u;
     signal input v;
+    signal input r;
 
     signal input oldDegU;
     signal input oldDegV;
     signal input newDegU;
     signal input newDegV;
 
-    signal input oldNbrArrU[padLen];
-    signal input oldNbrArrV[padLen];
-    signal input newNbrArrU[padLen];
-    signal input newNbrArrV[padLen];
+    signal input oldNbrArrU[maxDeg];
+    signal input oldNbrArrV[maxDeg];
+    signal input newNbrArrU[maxDeg];
+    signal input newNbrArrV[maxDeg];
 
     signal input siblingsU[nLevels + 1];
     signal input siblingsV[nLevels + 1];
@@ -98,31 +95,19 @@ template GraphTreeUpdate(nLevels, maxDeg) {
     // 5. Check newDegV = oldDegV + 1
     newDegV === oldDegV + 1;
 
-    // 6. Check newDegU <= maxDeg
-    component checkMaxDegU = LessEqThan(32);
-    checkMaxDegU.in[0] <== newDegU;
-    checkMaxDegU.in[1] <== maxDeg;
-    checkMaxDegU.out === 1;
-
-    // 7. Check newDegV <= maxDeg
-    component checkMaxDegV = LessEqThan(32);
-    checkMaxDegV.in[0] <== newDegV;
-    checkMaxDegV.in[1] <== maxDeg;
-    checkMaxDegV.out === 1;
-
-    // 8. Check that edge {u,v} does NOT already exist
+    // 6. Check that edge {u,v} does NOT already exist
     // Verify v is NOT in u's old neighbor list
-    component isVInUOldNbr = IsInArray(padLen);
-    for (var i = 0; i < padLen; i++) {
+    component isVInUOldNbr = IsInArray(maxDeg);
+    for (var i = 0; i < maxDeg; i++) {
         isVInUOldNbr.arr[i] <== oldNbrArrU[i];
     }
     isVInUOldNbr.target <== v;
     isVInUOldNbr.out === 0;
 
-    // 9. Check that edge {u,v} does NOT already exist
+    // 7. Check that edge {u,v} does NOT already exist
     // Verify u is NOT in v's old neighbor list
-    component isUInVOldNbr = IsInArray(padLen);
-    for (var i = 0; i < padLen; i++) {
+    component isUInVOldNbr = IsInArray(maxDeg);
+    for (var i = 0; i < maxDeg; i++) {
         isUInVOldNbr.arr[i] <== oldNbrArrV[i];
     }
     isUInVOldNbr.target <== u;
@@ -130,30 +115,34 @@ template GraphTreeUpdate(nLevels, maxDeg) {
 
     // ===== COMPUTE OLD HASHES (before adding edge) =====
 
-    component oldHashU = NbrHasher(maxDeg);
+    component oldHashU = SetHasher(maxDeg);
     oldHashU.d <== oldDegU;
-    for (var i = 0; i < padLen; i++) {
-        oldHashU.nbr_arr[i] <== oldNbrArrU[i];
+    oldHashU.r <== r;
+    for (var i = 0; i < maxDeg; i++) {
+        oldHashU.paddedNbrArr[i] <== oldNbrArrU[i];
     }
 
-    component oldHashV = NbrHasher(maxDeg);
+    component oldHashV = SetHasher(maxDeg);
     oldHashV.d <== oldDegV;
-    for (var i = 0; i < padLen; i++) {
-        oldHashV.nbr_arr[i] <== oldNbrArrV[i];
+    oldHashV.r <== r;
+    for (var i = 0; i < maxDeg; i++) {
+        oldHashV.paddedNbrArr[i] <== oldNbrArrV[i];
     }
 
     // ===== COMPUTE NEW HASHES (after adding edge) =====
 
-    component newHashU = NbrHasher(maxDeg);
+    component newHashU = SetHasher(maxDeg);
     newHashU.d <== newDegU;
-    for (var i = 0; i < padLen; i++) {
-        newHashU.nbr_arr[i] <== newNbrArrU[i];
+    newHashU.r <== r;
+    for (var i = 0; i < maxDeg; i++) {
+        newHashU.paddedNbrArr[i] <== newNbrArrU[i];
     }
 
-    component newHashV = NbrHasher(maxDeg);
+    component newHashV = SetHasher(maxDeg);
     newHashV.d <== newDegV;
-    for (var i = 0; i < padLen; i++) {
-        newHashV.nbr_arr[i] <== newNbrArrV[i];
+    newHashV.r <== r;
+    for (var i = 0; i < maxDeg; i++) {
+        newHashV.paddedNbrArr[i] <== newNbrArrV[i];
     }
 
     // ===== UPDATE MERKLE TREE =====
@@ -166,10 +155,10 @@ template GraphTreeUpdate(nLevels, maxDeg) {
         processorU.siblings[i] <== siblingsU[i];
     }
     processorU.oldKey <== u;
-    processorU.oldValue <== oldHashU.hash;
+    processorU.oldValue <== oldHashU.product;
     processorU.isOld0 <== 0; // Not inserting new leaf, updating existing
     processorU.newKey <== u;
-    processorU.newValue <== newHashU.hash;
+    processorU.newValue <== newHashU.product;
     processorU.fnc[0] <== 0; // UPDATE operation
     processorU.fnc[1] <== 1; // UPDATE operation
 
@@ -181,10 +170,10 @@ template GraphTreeUpdate(nLevels, maxDeg) {
         processorV.siblings[i] <== siblingsV[i];
     }
     processorV.oldKey <== v;
-    processorV.oldValue <== oldHashV.hash;
+    processorV.oldValue <== oldHashV.product;
     processorV.isOld0 <== 0; // Not inserting new leaf, updating existing
     processorV.newKey <== v;
-    processorV.newValue <== newHashV.hash;
+    processorV.newValue <== newHashV.product;
     processorV.fnc[0] <== 0; // UPDATE operation
     processorV.fnc[1] <== 1; // UPDATE operation
 

@@ -6,6 +6,7 @@ import { wasm as tester } from "circom_tester";
 import { buildPoseidon } from "circomlibjs";
 import { fileURLToPath } from "url";
 import { SmtTree } from "../utils/smt.js";
+import { computeSetHash, padNeighbors, ensureSiblingsLength } from "../utils/helpers.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,24 +16,15 @@ describe("GraphTreeUpdate circuit test", function () {
 
   const N_LEVELS = 4; // Tree depth (supports 2^4 = 16 vertices)
   const MAX_DEG = 15 * 4; // Maximum degree: 60
+  const R = 5566; // Public randomizer
+  let F;
   let circuit;
   let circuitTmpPath;
-  let poseidon;
-  let F;
-
-  // Calculate padLen based on maxDeg
-  function calculatePadLen(maxDeg) {
-    const numR = Math.ceil(maxDeg / 15);
-    return 15 * numR;
-  }
-
-  const PAD_LEN = calculatePadLen(MAX_DEG);
 
   before(async () => {
-    // Initialize Poseidon hasher
-    poseidon = await buildPoseidon();
+    const poseidon = await buildPoseidon();
     F = poseidon.F;
-
+    
     // Create circuit with nLevels=4, maxDeg=60
     const circuitSrc = `
             pragma circom 2.0.0;
@@ -49,7 +41,7 @@ describe("GraphTreeUpdate circuit test", function () {
     await circuit.loadConstraints();
     console.log(`\n✓ GraphTreeUpdate circuit compiled`);
     console.log(`  nLevels=${N_LEVELS}, maxDeg=${MAX_DEG}`);
-    console.log(`  padLen=${PAD_LEN}`);
+    console.log(`  r=${R}`);
     console.log(`  Constraints: ${circuit.constraints.length}\n`);
   });
 
@@ -58,58 +50,6 @@ describe("GraphTreeUpdate circuit test", function () {
       fs.unlinkSync(circuitTmpPath);
     }
   });
-
-  // Helper function to compute NbrHash
-  function computeNbrHash(d, neighbors) {
-    const paddedNbrs = [...neighbors];
-    while (paddedNbrs.length < PAD_LEN) {
-      paddedNbrs.push(0);
-    }
-
-    // First block: B_0 = [d, nbr[0..14]] (15 neighbors)
-    const firstBlock = [d];
-    for (let i = 0; i < 15; i++) {
-      firstBlock.push(paddedNbrs[i] || 0);
-    }
-
-    let acc = F.toString(poseidon(firstBlock));
-
-    // Continuation blocks (15 neighbors each)
-    const numR = Math.ceil(MAX_DEG / 15);
-
-    for (let round = 1; round < numR; round++) {
-      const block = [BigInt(acc)];
-      const startIdx = 15 + (round - 1) * 15;
-
-      for (let i = 0; i < 15; i++) {
-        const idx = startIdx + i;
-        block.push(paddedNbrs[idx] || 0);
-      }
-
-      acc = F.toString(poseidon(block));
-    }
-
-    return acc;
-  }
-
-  // Helper to pad neighbor array
-  function padNeighbors(neighbors) {
-    const padded = [...neighbors];
-    while (padded.length < PAD_LEN) {
-      padded.push(0);
-    }
-    return padded.map((x) => x.toString());
-  }
-
-  // Helper to ensure siblings array has exactly nLevels + 1 elements
-  // SmtTree.getSiblings returns nLevels elements, but SMTProcessor needs nLevels + 1
-  function ensureSiblingsLength(siblings) {
-    const padded = [...siblings];
-    while (padded.length < N_LEVELS + 1) {
-      padded.push(0);
-    }
-    return padded.map((x) => x.toString());
-  }
 
   /**
    * TEST CASES
@@ -147,10 +87,10 @@ describe("GraphTreeUpdate circuit test", function () {
     const newNbrArrV = [1]; // vertex 2 now connected to vertex 1
 
     // Compute hashes
-    const oldHashU = BigInt(computeNbrHash(oldDegU, oldNbrArrU));
-    const oldHashV = BigInt(computeNbrHash(oldDegV, oldNbrArrV));
-    const newHashU = BigInt(computeNbrHash(newDegU, newNbrArrU));
-    const newHashV = BigInt(computeNbrHash(newDegV, newNbrArrV));
+    const oldHashU = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrU));
+    const oldHashV = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrV));
+    const newHashU = BigInt(computeSetHash(F, MAX_DEG, R, newNbrArrU));
+    const newHashV = BigInt(computeSetHash(F, MAX_DEG, R, newNbrArrV));
 
     // Build initial tree with old hashes at leaves 0 and 1
     const tree = new SmtTree(N_LEVELS);
@@ -161,26 +101,27 @@ describe("GraphTreeUpdate circuit test", function () {
     const oldRoot = await tree.getRoot();
 
     // Get Merkle proof for U from original tree
-    const siblingsU = ensureSiblingsLength(await tree.getSiblings(u));
+    const siblingsU = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(u));
 
     // Update U to get intermediate tree state
     await tree.update(u, newHashU);
 
     // Get Merkle proof for V from tree after U update
-    const siblingsV = ensureSiblingsLength(await tree.getSiblings(v));
+    const siblingsV = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(v));
 
     // Prepare circuit input
     const input = {
       u: u.toString(),
       v: v.toString(),
+      r: R.toString(),
       oldDegU: oldDegU.toString(),
       oldDegV: oldDegV.toString(),
       newDegU: newDegU.toString(),
       newDegV: newDegV.toString(),
-      oldNbrArrU: padNeighbors(oldNbrArrU),
-      oldNbrArrV: padNeighbors(oldNbrArrV),
-      newNbrArrU: padNeighbors(newNbrArrU),
-      newNbrArrV: padNeighbors(newNbrArrV),
+      oldNbrArrU: padNeighbors(MAX_DEG, oldNbrArrU),
+      oldNbrArrV: padNeighbors(MAX_DEG, oldNbrArrV),
+      newNbrArrU: padNeighbors(MAX_DEG, newNbrArrU),
+      newNbrArrV: padNeighbors(MAX_DEG, newNbrArrV),
       siblingsU: siblingsU,
       siblingsV: siblingsV,
       oldRoot: F.toString(oldRoot),
@@ -224,10 +165,10 @@ describe("GraphTreeUpdate circuit test", function () {
     const newNbrArrVSorted = [1, 2, 4];
 
     // Compute hashes
-    const oldHashU = BigInt(computeNbrHash(oldDegU, oldNbrArrU));
-    const oldHashV = BigInt(computeNbrHash(oldDegV, oldNbrArrV));
-    const newHashU = BigInt(computeNbrHash(newDegU, newNbrArrU));
-    const newHashV = BigInt(computeNbrHash(newDegV, newNbrArrVSorted));
+    const oldHashU = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrU));
+    const oldHashV = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrV));
+    const newHashU = BigInt(computeSetHash(F, MAX_DEG, R, newNbrArrU));
+    const newHashV = BigInt(computeSetHash(F, MAX_DEG, R, newNbrArrVSorted));
 
     // Build initial tree with old hashes
     const tree = new SmtTree(N_LEVELS);
@@ -238,26 +179,27 @@ describe("GraphTreeUpdate circuit test", function () {
     const oldRoot = await tree.getRoot();
 
     // Get Merkle proof for U from original tree
-    const siblingsU = ensureSiblingsLength(await tree.getSiblings(u));
+    const siblingsU = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(u));
 
     // Update U to get intermediate tree state
     await tree.update(u, newHashU);
 
     // Get Merkle proof for V from tree after U update
-    const siblingsV = ensureSiblingsLength(await tree.getSiblings(v));
+    const siblingsV = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(v));
 
     // Prepare circuit input
     const input = {
       u: u.toString(),
       v: v.toString(),
+      r: R.toString(),
       oldDegU: oldDegU.toString(),
       oldDegV: oldDegV.toString(),
       newDegU: newDegU.toString(),
       newDegV: newDegV.toString(),
-      oldNbrArrU: padNeighbors(oldNbrArrU),
-      oldNbrArrV: padNeighbors(oldNbrArrV),
-      newNbrArrU: padNeighbors(newNbrArrU),
-      newNbrArrV: padNeighbors(newNbrArrVSorted),
+      oldNbrArrU: padNeighbors(MAX_DEG, oldNbrArrU),
+      oldNbrArrV: padNeighbors(MAX_DEG, oldNbrArrV),
+      newNbrArrU: padNeighbors(MAX_DEG, newNbrArrU),
+      newNbrArrV: padNeighbors(MAX_DEG, newNbrArrVSorted),
       siblingsU: siblingsU,
       siblingsV: siblingsV,
       oldRoot: F.toString(oldRoot),
@@ -291,27 +233,28 @@ describe("GraphTreeUpdate circuit test", function () {
     const newNbrArrV = [3, 5];
 
     // Build tree
-    const oldHashU = BigInt(computeNbrHash(oldDegU, oldNbrArrU));
-    const oldHashV = BigInt(computeNbrHash(oldDegV, oldNbrArrV));
+    const oldHashU = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrU));
+    const oldHashV = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrV));
 
     const tree = new SmtTree(N_LEVELS);
     await tree.init();
     await tree.insert(u, oldHashU);
 
     const oldRoot = await tree.getRoot();
-    const siblingsU = ensureSiblingsLength(await tree.getSiblings(u));
+    const siblingsU = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(u));
 
     const input = {
       u: u.toString(),
       v: v.toString(),
+      r: R.toString(),
       oldDegU: oldDegU.toString(),
       oldDegV: oldDegV.toString(),
       newDegU: newDegU.toString(),
       newDegV: newDegV.toString(),
-      oldNbrArrU: padNeighbors(oldNbrArrU),
-      oldNbrArrV: padNeighbors(oldNbrArrV),
-      newNbrArrU: padNeighbors(newNbrArrU),
-      newNbrArrV: padNeighbors(newNbrArrV),
+      oldNbrArrU: padNeighbors(MAX_DEG, oldNbrArrU),
+      oldNbrArrV: padNeighbors(MAX_DEG, oldNbrArrV),
+      newNbrArrU: padNeighbors(MAX_DEG, newNbrArrU),
+      newNbrArrV: padNeighbors(MAX_DEG, newNbrArrV),
       siblingsU: siblingsU,
       siblingsV: siblingsU,
       oldRoot: F.toString(oldRoot),
@@ -340,8 +283,8 @@ describe("GraphTreeUpdate circuit test", function () {
     const newNbrArrV = [2, 3];
 
     // Build tree
-    const oldHashU = BigInt(computeNbrHash(oldDegU, oldNbrArrU));
-    const oldHashV = BigInt(computeNbrHash(oldDegV, oldNbrArrV));
+    const oldHashU = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrU));
+    const oldHashV = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrV));
 
     const tree = new SmtTree(N_LEVELS);
     await tree.init();
@@ -349,20 +292,21 @@ describe("GraphTreeUpdate circuit test", function () {
     await tree.insert(v, oldHashV);
 
     const oldRoot = await tree.getRoot();
-    const siblingsU = ensureSiblingsLength(await tree.getSiblings(u));
-    const siblingsV = ensureSiblingsLength(await tree.getSiblings(v));
+    const siblingsU = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(u));
+    const siblingsV = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(v));
 
     const input = {
       u: u.toString(),
       v: v.toString(),
+      r: R.toString(),
       oldDegU: oldDegU.toString(),
       oldDegV: oldDegV.toString(),
       newDegU: newDegU.toString(), // Claiming 4 instead of 3!
       newDegV: newDegV.toString(),
-      oldNbrArrU: padNeighbors(oldNbrArrU),
-      oldNbrArrV: padNeighbors(oldNbrArrV),
-      newNbrArrU: padNeighbors(newNbrArrU),
-      newNbrArrV: padNeighbors(newNbrArrV),
+      oldNbrArrU: padNeighbors(MAX_DEG, oldNbrArrU),
+      oldNbrArrV: padNeighbors(MAX_DEG, oldNbrArrV),
+      newNbrArrU: padNeighbors(MAX_DEG, newNbrArrU),
+      newNbrArrV: padNeighbors(MAX_DEG, newNbrArrV),
       siblingsU: siblingsU,
       siblingsV: siblingsV,
       oldRoot: F.toString(oldRoot),
@@ -391,8 +335,8 @@ describe("GraphTreeUpdate circuit test", function () {
     const newNbrArrV = [1, 4, 5, 9];
 
     // Build tree
-    const oldHashU = BigInt(computeNbrHash(oldDegU, oldNbrArrU));
-    const oldHashV = BigInt(computeNbrHash(oldDegV, oldNbrArrV));
+    const oldHashU = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrU));
+    const oldHashV = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrV));
 
     const tree = new SmtTree(N_LEVELS);
     await tree.init();
@@ -400,25 +344,26 @@ describe("GraphTreeUpdate circuit test", function () {
     await tree.insert(v, oldHashV);
 
     const oldRoot = await tree.getRoot();
-    const siblingsU = ensureSiblingsLength(await tree.getSiblings(u));
+    const siblingsU = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(u));
 
     // Update U first
-    const newHashU = BigInt(computeNbrHash(newDegU, newNbrArrU));
+    const newHashU = BigInt(computeSetHash(F, MAX_DEG, R, newNbrArrU));
     await tree.update(u, newHashU);
 
-    const siblingsV = ensureSiblingsLength(await tree.getSiblings(v));
+    const siblingsV = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(v));
 
     const input = {
       u: u.toString(),
       v: v.toString(),
+      r: R.toString(),
       oldDegU: oldDegU.toString(),
       oldDegV: oldDegV.toString(),
       newDegU: newDegU.toString(),
       newDegV: newDegV.toString(), // Claiming 5 instead of 4!
-      oldNbrArrU: padNeighbors(oldNbrArrU),
-      oldNbrArrV: padNeighbors(oldNbrArrV),
-      newNbrArrU: padNeighbors(newNbrArrU),
-      newNbrArrV: padNeighbors(newNbrArrV),
+      oldNbrArrU: padNeighbors(MAX_DEG, oldNbrArrU),
+      oldNbrArrV: padNeighbors(MAX_DEG, oldNbrArrV),
+      newNbrArrU: padNeighbors(MAX_DEG, newNbrArrU),
+      newNbrArrV: padNeighbors(MAX_DEG, newNbrArrV),
       siblingsU: siblingsU,
       siblingsV: siblingsV,
       oldRoot: F.toString(oldRoot),
@@ -449,8 +394,8 @@ describe("GraphTreeUpdate circuit test", function () {
     const newNbrArrV = [u];
 
     // Build tree
-    const oldHashU = BigInt(computeNbrHash(oldDegU, oldNbrArrU));
-    const oldHashV = BigInt(computeNbrHash(oldDegV, oldNbrArrV));
+    const oldHashU = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrU));
+    const oldHashV = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrV));
 
     const tree = new SmtTree(N_LEVELS);
     await tree.init();
@@ -458,20 +403,21 @@ describe("GraphTreeUpdate circuit test", function () {
     await tree.insert(v, oldHashV);
 
     const oldRoot = await tree.getRoot();
-    const siblingsU = ensureSiblingsLength(await tree.getSiblings(u));
-    const siblingsV = ensureSiblingsLength(await tree.getSiblings(v));
+    const siblingsU = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(u));
+    const siblingsV = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(v));
 
     const input = {
       u: u.toString(),
       v: v.toString(),
+      r: R.toString(),
       oldDegU: oldDegU.toString(),
       oldDegV: oldDegV.toString(),
       newDegU: newDegU.toString(),
       newDegV: newDegV.toString(),
-      oldNbrArrU: padNeighbors(oldNbrArrU),
-      oldNbrArrV: padNeighbors(oldNbrArrV),
-      newNbrArrU: padNeighbors(newNbrArrU),
-      newNbrArrV: padNeighbors(newNbrArrV),
+      oldNbrArrU: padNeighbors(MAX_DEG, oldNbrArrU),
+      oldNbrArrV: padNeighbors(MAX_DEG, oldNbrArrV),
+      newNbrArrU: padNeighbors(MAX_DEG, newNbrArrU),
+      newNbrArrV: padNeighbors(MAX_DEG, newNbrArrV),
       siblingsU: siblingsU,
       siblingsV: siblingsV,
       oldRoot: F.toString(oldRoot),
@@ -500,8 +446,8 @@ describe("GraphTreeUpdate circuit test", function () {
     const newNbrArrV = [u];
 
     // Build tree with old hashes
-    const oldHashU = BigInt(computeNbrHash(oldDegU, oldNbrArrU));
-    const oldHashV = BigInt(computeNbrHash(oldDegV, oldNbrArrV));
+    const oldHashU = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrU));
+    const oldHashV = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrV));
 
     const tree = new SmtTree(N_LEVELS);
     await tree.init();
@@ -510,19 +456,20 @@ describe("GraphTreeUpdate circuit test", function () {
     const oldRoot = await tree.getRoot();
     // Dummy siblings for u (which is invalid)
     const siblingsU = Array(N_LEVELS + 1).fill("0");
-    const siblingsV = ensureSiblingsLength(await tree.getSiblings(v));
+    const siblingsV = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(v));
 
     const input = {
       u: u.toString(), // 0 - reserved/invalid!
       v: v.toString(),
+      r: R.toString(),
       oldDegU: oldDegU.toString(),
       oldDegV: oldDegV.toString(),
       newDegU: newDegU.toString(),
       newDegV: newDegV.toString(),
-      oldNbrArrU: padNeighbors(oldNbrArrU),
-      oldNbrArrV: padNeighbors(oldNbrArrV),
-      newNbrArrU: padNeighbors(newNbrArrU),
-      newNbrArrV: padNeighbors(newNbrArrV),
+      oldNbrArrU: padNeighbors(MAX_DEG, oldNbrArrU),
+      oldNbrArrV: padNeighbors(MAX_DEG, oldNbrArrV),
+      newNbrArrU: padNeighbors(MAX_DEG, newNbrArrU),
+      newNbrArrV: padNeighbors(MAX_DEG, newNbrArrV),
       siblingsU: siblingsU,
       siblingsV: siblingsV,
       oldRoot: F.toString(oldRoot),
@@ -553,8 +500,8 @@ describe("GraphTreeUpdate circuit test", function () {
     const newNbrArrV = [6, 6]; // Trying to add 6 again
 
     // Build tree
-    const oldHashU = BigInt(computeNbrHash(oldDegU, oldNbrArrU));
-    const oldHashV = BigInt(computeNbrHash(oldDegV, oldNbrArrV));
+    const oldHashU = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrU));
+    const oldHashV = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrV));
 
     const tree = new SmtTree(N_LEVELS);
     await tree.init();
@@ -562,25 +509,26 @@ describe("GraphTreeUpdate circuit test", function () {
     await tree.insert(v, oldHashV);
 
     const oldRoot = await tree.getRoot();
-    const siblingsU = ensureSiblingsLength(await tree.getSiblings(u));
+    const siblingsU = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(u));
 
     // Update U first
-    const newHashU = BigInt(computeNbrHash(newDegU, newNbrArrU));
+    const newHashU = BigInt(computeSetHash(F, MAX_DEG, R, newNbrArrU));
     await tree.update(u, newHashU);
 
-    const siblingsV = ensureSiblingsLength(await tree.getSiblings(v));
+    const siblingsV = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(v));
 
     const input = {
       u: u.toString(),
       v: v.toString(),
+      r: R.toString(),
       oldDegU: oldDegU.toString(),
       oldDegV: oldDegV.toString(),
       newDegU: newDegU.toString(),
       newDegV: newDegV.toString(),
-      oldNbrArrU: padNeighbors(oldNbrArrU),
-      oldNbrArrV: padNeighbors(oldNbrArrV),
-      newNbrArrU: padNeighbors(newNbrArrU),
-      newNbrArrV: padNeighbors(newNbrArrV),
+      oldNbrArrU: padNeighbors(MAX_DEG, oldNbrArrU),
+      oldNbrArrV: padNeighbors(MAX_DEG, oldNbrArrV),
+      newNbrArrU: padNeighbors(MAX_DEG, newNbrArrU),
+      newNbrArrV: padNeighbors(MAX_DEG, newNbrArrV),
       siblingsU: siblingsU,
       siblingsV: siblingsV,
       oldRoot: F.toString(oldRoot),
@@ -610,8 +558,8 @@ describe("GraphTreeUpdate circuit test", function () {
     const newNbrArrV = [2, 3];
 
     // Build tree
-    const oldHashU = BigInt(computeNbrHash(oldDegU, oldNbrArrU));
-    const oldHashV = BigInt(computeNbrHash(oldDegV, oldNbrArrV));
+    const oldHashU = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrU));
+    const oldHashV = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrV));
 
     const tree = new SmtTree(N_LEVELS);
     await tree.init();
@@ -619,22 +567,23 @@ describe("GraphTreeUpdate circuit test", function () {
     await tree.insert(v, oldHashV);
 
     const oldRoot = await tree.getRoot();
-    const siblingsU = ensureSiblingsLength(await tree.getSiblings(u));
+    const siblingsU = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(u));
 
     // Update U first
-    const siblingsV = ensureSiblingsLength(await tree.getSiblings(v));
+    const siblingsV = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(v));
 
     const input = {
       u: u.toString(),
       v: v.toString(),
+      r: R.toString(),
       oldDegU: oldDegU.toString(),
       oldDegV: oldDegV.toString(),
       newDegU: newDegU.toString(),
       newDegV: newDegV.toString(),
-      oldNbrArrU: padNeighbors(oldNbrArrU),
-      oldNbrArrV: padNeighbors(oldNbrArrV),
-      newNbrArrU: padNeighbors(newNbrArrU), // Contains duplicate!
-      newNbrArrV: padNeighbors(newNbrArrV),
+      oldNbrArrU: padNeighbors(MAX_DEG, oldNbrArrU),
+      oldNbrArrV: padNeighbors(MAX_DEG, oldNbrArrV),
+      newNbrArrU: padNeighbors(MAX_DEG, newNbrArrU), // Contains duplicate!
+      newNbrArrV: padNeighbors(MAX_DEG, newNbrArrV),
       siblingsU: siblingsU,
       siblingsV: siblingsV,
       oldRoot: F.toString(oldRoot),
@@ -666,8 +615,8 @@ describe("GraphTreeUpdate circuit test", function () {
     const newNbrArrV = [u];
 
     // Build tree with old hashes
-    const oldHashU = BigInt(computeNbrHash(oldDegU, oldNbrArrU));
-    const oldHashV = BigInt(computeNbrHash(oldDegV, oldNbrArrV));
+    const oldHashU = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrU));
+    const oldHashV = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrV));
 
     const tree = new SmtTree(N_LEVELS);
     await tree.init();
@@ -677,21 +626,22 @@ describe("GraphTreeUpdate circuit test", function () {
     const _ = oldHashV;
 
     const oldRoot = await tree.getRoot();
-    const siblingsU = ensureSiblingsLength(await tree.getSiblings(u));
+    const siblingsU = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(u));
     // For v, we'll provide dummy siblings
     const siblingsV = Array(N_LEVELS + 1).fill("0");
 
     const input = {
       u: u.toString(),
-      v: v.toString(), // Out of bounds!
+      v: v.toString(),
+      r: R.toString(), // Out of bounds!
       oldDegU: oldDegU.toString(),
       oldDegV: oldDegV.toString(),
       newDegU: newDegU.toString(),
       newDegV: newDegV.toString(),
-      oldNbrArrU: padNeighbors(oldNbrArrU),
-      oldNbrArrV: padNeighbors(oldNbrArrV),
-      newNbrArrU: padNeighbors(newNbrArrU),
-      newNbrArrV: padNeighbors(newNbrArrV),
+      oldNbrArrU: padNeighbors(MAX_DEG, oldNbrArrU),
+      oldNbrArrV: padNeighbors(MAX_DEG, oldNbrArrV),
+      newNbrArrU: padNeighbors(MAX_DEG, newNbrArrU),
+      newNbrArrV: padNeighbors(MAX_DEG, newNbrArrV),
       siblingsU: siblingsU,
       siblingsV: siblingsV,
       oldRoot: F.toString(oldRoot),
