@@ -11,7 +11,8 @@ include "./lib/is_in_array.circom";
 // 1. Verifies preconditions (u != v, degrees within bounds)
 // 2. Computes old SetHash for u and v (before adding edge)
 // 3. Computes new SetHash for u and v (after adding edge)
-// 4. Updates the Merkle tree for both leaves u and v
+// 4. adding product check SetHashG'(u) * r = SetHashG(u) * (r - v)
+// 5. Updates the Merkle tree for both leaves u and v
 //
 // Parameters:
 //   nLevels - Depth of the Merkle tree (tree can hold 2^nLevels vertices)
@@ -144,6 +145,23 @@ template GraphTreeUpdate(nLevels, maxDeg) {
     for (var i = 0; i < maxDeg; i++) {
         newHashV.paddedNbrArr[i] <== newNbrArrV[i];
     }
+
+    // ===== PRODUCT CONSISTENCY CHECKS =====
+    // Verify: SetHash'(u) * r = SetHash(u) * (r - v)
+    // This ensures newNbrArrU = oldNbrArrU ∪ {v}
+    signal newU;
+    signal oldU;
+    newU <== newHashU.product * r;
+    oldU <== oldHashU.product * (r - v);
+    newU === oldU;
+
+    // Verify: SetHash'(v) * r = SetHash(v) * (r - u)
+    // This ensures newNbrArrV = oldNbrArrV ∪ {u}
+    signal newV;
+    signal oldV;
+    newV <== newHashV.product * r;
+    oldV <== oldHashV.product * (r - u);
+    newV === oldV;
 
     // ===== UPDATE MERKLE TREE =====
 

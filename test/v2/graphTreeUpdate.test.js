@@ -67,6 +67,7 @@ describe("GraphTreeUpdate circuit test", function () {
    * [X] fail when degree exceeds maxDeg
    * [X] fail when edge already exists (duplicate edge prevention)
    * [X] fail when neighbor array contains duplicates (NodeHasher strictly ascending check)
+   * [X] fail product consistency check when newNbrArr doesn't equal oldNbrArr ∪ {v}
    */
 
   it("should update GraphTree when adding edge {1,2}", async () => {
@@ -592,6 +593,67 @@ describe("GraphTreeUpdate circuit test", function () {
     try {
       await circuit.calculateWitness(input, true);
       assert.fail("Should have failed with duplicate elements in neighbor array");
+    } catch (error) {
+      assert(error.message.includes("Assert Failed"));
+    }
+  });
+
+  it("should fail product consistency check when newNbrArr doesn't equal oldNbrArr ∪ {v}", async () => {
+    // This tests: SetHash'(u) * r = SetHash(u) * (r - v)
+    // We'll provide valid-looking inputs but where the new neighbor array
+    // doesn't actually represent adding v to the old neighbors
+    const u = 4;
+    const v = 9;
+
+    const oldDegU = 2;
+    const oldDegV = 1;
+    const oldNbrArrU = [2, 6];
+    const oldNbrArrV = [3];
+
+    const newDegU = 3;
+    const newDegV = 2;
+    // INVALID: newNbrArrU should be [2, 6, 9] (adding v=9)
+    // but we're claiming [2, 6, 7] (adding 7 instead of v=9)
+    const newNbrArrU = [2, 6, 7]; // Wrong! Should contain 9, not 7
+    const newNbrArrV = [3, 4]; // Correct: adds u=4
+
+    // Build tree
+    const oldHashU = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrU));
+    const oldHashV = BigInt(computeSetHash(F, MAX_DEG, R, oldNbrArrV));
+    const newHashU = BigInt(computeSetHash(F, MAX_DEG, R, newNbrArrU));
+
+    const tree = new SmtTree(N_LEVELS);
+    await tree.init();
+    await tree.insert(u, oldHashU);
+    await tree.insert(v, oldHashV);
+
+    const oldRoot = await tree.getRoot();
+    const siblingsU = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(u));
+
+    // Update U first
+    await tree.update(u, newHashU);
+    const siblingsV = ensureSiblingsLength(N_LEVELS, await tree.getSiblings(v));
+
+    const input = {
+      u: u.toString(),
+      v: v.toString(),
+      r: R.toString(),
+      oldDegU: oldDegU.toString(),
+      oldDegV: oldDegV.toString(),
+      newDegU: newDegU.toString(),
+      newDegV: newDegV.toString(),
+      oldNbrArrU: padNeighbors(MAX_DEG, oldNbrArrU),
+      oldNbrArrV: padNeighbors(MAX_DEG, oldNbrArrV),
+      newNbrArrU: padNeighbors(MAX_DEG, newNbrArrU), // Wrong neighbor added!
+      newNbrArrV: padNeighbors(MAX_DEG, newNbrArrV),
+      siblingsU: siblingsU,
+      siblingsV: siblingsV,
+      oldRoot: F.toString(oldRoot),
+    };
+
+    try {
+      await circuit.calculateWitness(input, true);
+      assert.fail("Should have failed product consistency check: newNbrArrU doesn't equal oldNbrArrU ∪ {v}");
     } catch (error) {
       assert(error.message.includes("Assert Failed"));
     }
