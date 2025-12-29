@@ -40,129 +40,52 @@ template HashInputs() {
     // Output - 256 bits from SHA256
     signal output hashOut[256];
 
-    var i, j;
+    var i, j, k;
 
     // Convert each 128-bit value to 16 bytes
     // 128 bits is always safe (well under field prime)
-    
-    component oldGraphHighBits = Num2Bits(128);
-    oldGraphHighBits.in <== oldGraphRootHigh;
-    component oldGraphLowBits = Num2Bits(128);
-    oldGraphLowBits.in <== oldGraphRootLow;
-    
-    component oldScoreHighBits = Num2Bits(128);
-    oldScoreHighBits.in <== oldScoreRootHigh;
-    component oldScoreLowBits = Num2Bits(128);
-    oldScoreLowBits.in <== oldScoreRootLow;
-    
-    component newGraphHighBits = Num2Bits(128);
-    newGraphHighBits.in <== newGraphRootHigh;
-    component newGraphLowBits = Num2Bits(128);
-    newGraphLowBits.in <== newGraphRootLow;
-    
-    component newScoreHighBits = Num2Bits(128);
-    newScoreHighBits.in <== newScoreRootHigh;
-    component newScoreLowBits = Num2Bits(128);
-    newScoreLowBits.in <== newScoreRootLow;
-    
-    component batchIdHighBits = Num2Bits(128);
-    batchIdHighBits.in <== batchIdHigh;
-    component batchIdLowBits = Num2Bits(128);
-    batchIdLowBits.in <== batchIdLow;
+    component num2Bits128[12];
+    for (i = 0; i < 12; i++) {
+        num2Bits128[i] = Num2Bits(128);
+    }
+    num2Bits128[0].in <== oldGraphRootHigh;
+    num2Bits128[1].in <== oldGraphRootLow;
+    num2Bits128[2].in <== oldScoreRootHigh;
+    num2Bits128[3].in <== oldScoreRootLow;
+    num2Bits128[4].in <== newGraphRootHigh;
+    num2Bits128[5].in <== newGraphRootLow;
+    num2Bits128[6].in <== newScoreRootHigh;
+    num2Bits128[7].in <== newScoreRootLow;
+    num2Bits128[8].in <== batchIdHigh;
+    num2Bits128[9].in <== batchIdLow;
+    num2Bits128[10].in <== storageHashHigh;
+    num2Bits128[11].in <== storageHashLow;
     
     component batchSizeBits = Num2Bits(32);
     batchSizeBits.in <== batchSize;
-    
+
     component nBits = Num2Bits(32);
     nBits.in <== n;
-    
-    component storageHashHighBits = Num2Bits(128);
-    storageHashHighBits.in <== storageHashHigh;
-    component storageHashLowBits = Num2Bits(128);
-    storageHashLowBits.in <== storageHashLow;
 
     // Build input bit array for SHA256
     // Bits are packed in big-endian byte order
     signal inBits[DATA_BITS];
     var bitIdx = 0;
 
-    // Helper: pack 128 bits into 16 bytes (big-endian)
-    // bit 127 is MSB of byte 0, bit 0 is LSB of byte 15
-    
-    // oldGraphRoot (32 bytes = high 16 bytes + low 16 bytes)
-    for (i = 0; i < 16; i++) {
-        for (j = 7; j >= 0; j--) {
-            inBits[bitIdx] <== oldGraphHighBits.out[127 - i*8 - (7-j)];
-            bitIdx++;
-        }
-    }
-    for (i = 0; i < 16; i++) {
-        for (j = 7; j >= 0; j--) {
-            inBits[bitIdx] <== oldGraphLowBits.out[127 - i*8 - (7-j)];
-            bitIdx++;
-        }
-    }
-    
-    // oldScoreRoot (32 bytes)
-    for (i = 0; i < 16; i++) {
-        for (j = 7; j >= 0; j--) {
-            inBits[bitIdx] <== oldScoreHighBits.out[127 - i*8 - (7-j)];
-            bitIdx++;
-        }
-    }
-    for (i = 0; i < 16; i++) {
-        for (j = 7; j >= 0; j--) {
-            inBits[bitIdx] <== oldScoreLowBits.out[127 - i*8 - (7-j)];
-            bitIdx++;
-        }
-    }
-    
-    // newGraphRoot (32 bytes)
-    for (i = 0; i < 16; i++) {
-        for (j = 7; j >= 0; j--) {
-            inBits[bitIdx] <== newGraphHighBits.out[127 - i*8 - (7-j)];
-            bitIdx++;
-        }
-    }
-    for (i = 0; i < 16; i++) {
-        for (j = 7; j >= 0; j--) {
-            inBits[bitIdx] <== newGraphLowBits.out[127 - i*8 - (7-j)];
-            bitIdx++;
-        }
-    }
-    
-    // newScoreRoot (32 bytes)
-    for (i = 0; i < 16; i++) {
-        for (j = 7; j >= 0; j--) {
-            inBits[bitIdx] <== newScoreHighBits.out[127 - i*8 - (7-j)];
-            bitIdx++;
-        }
-    }
-    for (i = 0; i < 16; i++) {
-        for (j = 7; j >= 0; j--) {
-            inBits[bitIdx] <== newScoreLowBits.out[127 - i*8 - (7-j)];
-            bitIdx++;
-        }
-    }
-    
-    // batchId (32 bytes)
-    for (i = 0; i < 16; i++) {
-        for (j = 7; j >= 0; j--) {
-            inBits[bitIdx] <== batchIdHighBits.out[127 - i*8 - (7-j)];
-            bitIdx++;
-        }
-    }
-    for (i = 0; i < 16; i++) {
-        for (j = 7; j >= 0; j--) {
-            inBits[bitIdx] <== batchIdLowBits.out[127 - i*8 - (7-j)];
-            bitIdx++;
+    // Pack 5x 32-byte values (oldGraphRoot, oldScoreRoot, newGraphRoot, newScoreRoot, batchId)
+    for (k = 0; k < 10; k++) { // 10 x 128-bit parts
+        for (i = 0; i < 16; i++) { // 16 bytes per part
+            for (j = 7; j >= 0; j--) { // 8 bits per byte
+                inBits[bitIdx] <== num2Bits128[k].out[(15-i)*8 + j];
+                bitIdx++;
+            }
         }
     }
     
     // batchSize (4 bytes)
     for (i = 0; i < 4; i++) {
         for (j = 7; j >= 0; j--) {
-            inBits[bitIdx] <== batchSizeBits.out[31 - i*8 - (7-j)];
+            inBits[bitIdx] <== batchSizeBits.out[(3-i)*8 + j];
             bitIdx++;
         }
     }
@@ -170,22 +93,18 @@ template HashInputs() {
     // n (4 bytes)
     for (i = 0; i < 4; i++) {
         for (j = 7; j >= 0; j--) {
-            inBits[bitIdx] <== nBits.out[31 - i*8 - (7-j)];
+            inBits[bitIdx] <== nBits.out[(3-i)*8 + j];
             bitIdx++;
         }
     }
     
     // storageHash (32 bytes)
-    for (i = 0; i < 16; i++) {
-        for (j = 7; j >= 0; j--) {
-            inBits[bitIdx] <== storageHashHighBits.out[127 - i*8 - (7-j)];
-            bitIdx++;
-        }
-    }
-    for (i = 0; i < 16; i++) {
-        for (j = 7; j >= 0; j--) {
-            inBits[bitIdx] <== storageHashLowBits.out[127 - i*8 - (7-j)];
-            bitIdx++;
+    for (k = 10; k < 12; k++) { // The last 2 128-bit parts for storageHash
+        for (i = 0; i < 16; i++) {
+            for (j = 7; j >= 0; j--) {
+                inBits[bitIdx] <== num2Bits128[k].out[(15-i)*8 + j];
+                bitIdx++;
+            }
         }
     }
 
