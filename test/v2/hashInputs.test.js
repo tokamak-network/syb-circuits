@@ -12,15 +12,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 
-// Generate a random bytes32 hex string
+// Generate a random numbers
 const bytes32Arb = fc.uint8Array({ minLength: 32, maxLength: 32 }).map(
   (arr) => "0x" + Buffer.from(arr).toString("hex")
 );
-
-// Generate a random uint256 as BigInt
-const uint256Arb = fc.bigInt({ min: 0n, max: (1n << 256n) - 1n });
-
-// Generate a random uint32
+const uint64Arb = fc.bigInt({ min: 0n, max: (1n << 64n) - 1n });
 const uint32Arb = fc.integer({ min: 0, max: 0xFFFFFFFF });
 
 // helper functions
@@ -36,8 +32,6 @@ function buildCircuitInput(oldGraphRoot, oldScoreRoot, newGraphRoot, newScoreRoo
   const oldScoreRootSplit = splitBytes32(oldScoreRoot);
   const newGraphRootSplit = splitBytes32(newGraphRoot);
   const newScoreRootSplit = splitBytes32(newScoreRoot);
-  const batchIdHex = ethers.zeroPadValue(ethers.toBeHex(batchId), 32);
-  const batchIdSplit = splitBytes32(batchIdHex);
   const storageHashSplit = splitBytes32(storageHash);
 
   return {
@@ -49,8 +43,7 @@ function buildCircuitInput(oldGraphRoot, oldScoreRoot, newGraphRoot, newScoreRoo
     newGraphRootLow: newGraphRootSplit.low.toString(),
     newScoreRootHigh: newScoreRootSplit.high.toString(),
     newScoreRootLow: newScoreRootSplit.low.toString(),
-    batchIdHigh: batchIdSplit.high.toString(),
-    batchIdLow: batchIdSplit.low.toString(),
+    batchId: batchId.toString(),
     batchSize: batchSize.toString(),
     n: n.toString(),
     storageHashHigh: storageHashSplit.high.toString(),
@@ -60,7 +53,7 @@ function buildCircuitInput(oldGraphRoot, oldScoreRoot, newGraphRoot, newScoreRoo
 
 function buildExpectedHash(oldGraphRoot, oldScoreRoot, newGraphRoot, newScoreRoot, batchId, batchSize, n, storageHash) {
   const packed = ethers.solidityPacked(
-    ['bytes32', 'bytes32', 'bytes32', 'bytes32', 'uint256', 'uint32', 'uint32', 'bytes32'],
+    ['bytes32', 'bytes32', 'bytes32', 'bytes32', 'uint64', 'uint32', 'uint32', 'bytes32'],
     [oldGraphRoot, oldScoreRoot, newGraphRoot, newScoreRoot, batchId, batchSize, n, storageHash]
   );
   return ethers.sha256(packed);
@@ -113,7 +106,7 @@ describe("HashInputs property-based tests (fast-check)", function () {
       bytes32Arb,  // oldScoreRoot
       bytes32Arb,  // newGraphRoot
       bytes32Arb,  // newScoreRoot
-      uint256Arb,  // batchId
+      uint64Arb,  // batchId
       uint32Arb,   // batchSize
       uint32Arb,   // n
       bytes32Arb,  // storageHash
@@ -168,15 +161,13 @@ describe("HashInputs property-based tests (fast-check)", function () {
           "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
           "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
           "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-          (1n << 256n) - 1n,
+          (1n << 64n) - 1n,
           0xFFFFFFFF,
           0xFFFFFFFF,
           "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
         ],
       ],
     });
-
-    console.log("  ✓ All random property tests passed");
   });
 
   /**
@@ -195,8 +186,8 @@ describe("HashInputs property-based tests (fast-check)", function () {
     };
 
     const property = fc.asyncProperty(
-      uint256Arb,
-      uint256Arb,
+      uint64Arb,
+      uint64Arb,
       async (batchId1, batchId2) => {
         // Skip if same batchId
         if (batchId1 === batchId2) return true;
@@ -218,7 +209,6 @@ describe("HashInputs property-based tests (fast-check)", function () {
     );
 
     await fc.assert(property, { numRuns: 20 });
-    console.log("  ✓ Different batchIds produce different hashes");
   });
 });
 
