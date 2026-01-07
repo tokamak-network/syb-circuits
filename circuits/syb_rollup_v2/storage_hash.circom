@@ -75,26 +75,17 @@ template StorageHash(n) {
     }
 
     // n bits (128-159) - compile-time constant, encode as 4 bytes big-endian
-    var nByte0 = (n >> 24) & 0xFF;
-    var nByte1 = (n >> 16) & 0xFF;
-    var nByte2 = (n >> 8) & 0xFF;
-    var nByte3 = n & 0xFF;
+    var nBytes[4];
+    nBytes[0] = (n >> 24) & 0xFF;
+    nBytes[1] = (n >> 16) & 0xFF;
+    nBytes[2] = (n >> 8) & 0xFF;
+    nBytes[3] = n & 0xFF;
 
-    for (j = 7; j >= 0; j--) {
-        inBits[bitIdx] <== (nByte0 >> j) & 1;
-        bitIdx++;
-    }
-    for (j = 7; j >= 0; j--) {
-        inBits[bitIdx] <== (nByte1 >> j) & 1;
-        bitIdx++;
-    }
-    for (j = 7; j >= 0; j--) {
-        inBits[bitIdx] <== (nByte2 >> j) & 1;
-        bitIdx++;
-    }
-    for (j = 7; j >= 0; j--) {
-        inBits[bitIdx] <== (nByte3 >> j) & 1;
-        bitIdx++;
+    for (i = 0; i < 4; i++) {
+        for (j = 7; j >= 0; j--) {
+            inBits[bitIdx] <== (nBytes[i] >> j) & 1;
+            bitIdx++;
+        }
     }
 
     // edge bits (160+): each edge is 72 bits (ilo[32] + ihi[32] + flag[8])
