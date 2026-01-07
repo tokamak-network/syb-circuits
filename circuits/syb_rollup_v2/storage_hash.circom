@@ -7,21 +7,21 @@ include "../../node_modules/circomlib/circuits/bitify.circom";
  * StorageHash - Computes SHA256 of edges batch for on-chain verification
  *
  * Must match Solidity: sha256(abi.encodePacked(
- *     batchId,      // uint256 - 32 bytes
+ *     batchId,      // uint64 - 8 bytes
  *     start,        // uint32 - 4 bytes
  *     n,            // uint32 - 4 bytes
  *     edgesPacked   // n * 9 bytes (each edge: ilo[4] || ihi[4] || flag[1])
  * ))
  *
- * Total bytes: 32 + 4 + 4 + n*9 = 40 + n*9
+ * Total bytes: 8 + 4 + 4 + n*9 = 16 + n*9
  */
 template StorageHash(n) {
     // Calculate byte and bit lengths
-    var DATA_BYTES = 40 + n * 9;
+    var DATA_BYTES = 16 + n * 9;
     var DATA_BITS = DATA_BYTES * 8;
 
     // Inputs
-    signal input batchId;           // uint256
+    signal input batchId;           // uint64
     signal input start;             // uint32
     signal input edges[n][3];       // edges[i][0] = ilo, edges[i][1] = ihi (uint32 each), edges[i][2] = flag (uint8)
 
@@ -31,7 +31,7 @@ template StorageHash(n) {
     var i, j, k;
 
     // Convert all inputs to bits
-    component batchIdBits = Num2Bits(256);
+    component batchIdBits = Num2Bits(64);
     batchIdBits.in <== batchId;
 
     component startBits = Num2Bits(32);
@@ -56,11 +56,11 @@ template StorageHash(n) {
     signal inBits[DATA_BITS];
     var bitIdx = 0;
 
-    // batchId bits (0-255) - big-endian byte order, MSB first
-    for (i = 0; i < 32; i++) {
+    // batchId bits (0-63) - big-endian byte order, MSB first
+    for (i = 0; i < 8; i++) {
         for (j = 7; j >= 0; j--) {
-            // Byte i should come from bits (31-i)*8+j of the number
-            inBits[bitIdx] <== batchIdBits.out[(31-i)*8 + j];
+            // Byte i should come from bits (7-i)*8+j of the number
+            inBits[bitIdx] <== batchIdBits.out[(7-i)*8 + j];
             bitIdx++;
         }
     }

@@ -52,7 +52,7 @@ function bitsToHex(bits) {
    * Build storage hash matching Solidity contract and circuit:
    * sha256(abi.encodePacked(batchId, start, n, edgesPacked))
    *
-   * @param {BigInt} batchId - uint256
+   * @param {BigInt} batchId - uint64
    * @param {number} start - uint32 (hashed as value, not used as index)
    * @param {number} n - uint32
    * @param {BigInt[]} unforged - array of uint72 values: (flag << 64) | (ilo << 32) | ihi (length = n)
@@ -77,9 +77,9 @@ function buildStorageHash(batchId, start, n, unforged) {
       edgesPacked[offset + 8] = flag & 0xff;
   }
 
-  // ethers v5 syntax - uint256 for batchId
+  // ethers v5 syntax - uint64 for batchId
   const packed = ethers.utils.solidityPack(
-      ['uint256', 'uint32', 'uint32', 'bytes'],
+      ['uint64', 'uint32', 'uint32', 'bytes'],
       [batchId.toString(), start, n, edgesPacked]
   );
   console.log(`  Packed hex: ${packed}`);
