@@ -65,7 +65,7 @@ template StorageHash(n) {
         }
     }
 
-    // start bits (256-287) - big-endian byte order, MSB first
+    // start bits (64-127) - big-endian byte order, MSB first
     for (i = 0; i < 4; i++) {
         for (j = 7; j >= 0; j--) {
             // Byte i should come from bits (3-i)*8+j of the number
@@ -74,7 +74,7 @@ template StorageHash(n) {
         }
     }
 
-    // n bits (288-319) - compile-time constant, encode as 4 bytes big-endian
+    // n bits (128-159) - compile-time constant, encode as 4 bytes big-endian
     var nByte0 = (n >> 24) & 0xFF;
     var nByte1 = (n >> 16) & 0xFF;
     var nByte2 = (n >> 8) & 0xFF;
@@ -97,7 +97,7 @@ template StorageHash(n) {
         bitIdx++;
     }
 
-    // edge bits (320+): each edge is 72 bits (ilo[32] + ihi[32] + flag[8])
+    // edge bits (160+): each edge is 72 bits (ilo[32] + ihi[32] + flag[8])
     for (k = 0; k < n; k++) {
         // ilo bits - big-endian byte order
         for (i = 0; i < 4; i++) {
