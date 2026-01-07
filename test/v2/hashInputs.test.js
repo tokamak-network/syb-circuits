@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
 import { describe, it, before, after } from "mocha";
-import assert from "assert";
 import { wasm as tester } from "circom_tester";
 import { fileURLToPath } from "url";
 import { ethers } from "ethers";
