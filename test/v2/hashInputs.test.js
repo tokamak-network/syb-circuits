@@ -173,7 +173,7 @@ describe("HashInputs property-based tests (fast-check)", function () {
    * Property: Different inputs should produce different hashes
    * (with high probability)
    */
-  it("should produce different hashes for different inputs", async () => {
+  it("should produce correct hash for different input values", async () => {
     const fixedInputs = {
       oldGraphRoot: "0x1111111111111111111111111111111111111111111111111111111111111111",
       oldScoreRoot: "0x2222222222222222222222222222222222222222222222222222222222222222",
